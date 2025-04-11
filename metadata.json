@@ -25,5 +25,25 @@
       "n_samples": 81086,
       "n_features": 35,
       "task": "prediction"
+    },
+    "chicago_mode_dataset": {
+      "filename": "chicago_mode_choice/chicago_mode.csv.gz",
+      "description": "2019 Chicago my daily travel survey dataset. Wide format. Mode 0: Auto, 1: Train, 2:Active (walk, bike)",
+      "target": "mode",
+      "features": [
+        "age",
+        "male",
+        "educ",
+        "hhsize",
+        "hhveh",
+        "hhinc",
+        "auto_time",
+        "auto_cost",
+        "train_time",
+        "train_cost",
+        "active_time"],
+      "n_samples": 26099,
+      "n_features": 8,
+      "task": "prediction"
     }
   }
