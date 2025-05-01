@@ -26,7 +26,7 @@
       "n_features": 35,
       "task": "prediction"
     },
-    "chicago_mode_dataset": {
+    "chicago_mode_choice_dataset": {
       "filename": "chicago_mode_choice/chicago_mode.csv.gz",
       "description": "2019 Chicago my daily travel survey dataset. Wide format. Mode 0: Auto, 1: Train, 2:Active (walk, bike)",
       "target": "mode",
