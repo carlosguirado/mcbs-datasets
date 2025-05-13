@@ -1,0 +1,41 @@
+{
+  "name": "mixed_swissmetro",
+  "description": "Mixed logit model for Swissmetro data with random coefficient for travel time",
+  "model_type": "mixed",
+  "compatible_datasets": ["swissmetro_dataset"],
+  "base_class": "BaseSwissmetroModel",
+  "parameters": [
+    {"name": "ASC_CAR", "default": 0, "fixed": false},
+    {"name": "ASC_TRAIN", "default": 0, "fixed": false},
+    {"name": "ASC_SM", "default": 0, "fixed": true, "value": 1},
+    {"name": "B_TIME", "default": 0, "fixed": false},
+    {"name": "B_TIME_S", "default": 1, "fixed": false},
+    {"name": "B_COST", "default": 0, "fixed": false}
+  ],
+  "random_parameters": {
+    "B_TIME": {
+      "distribution": "NORMAL",
+      "mean_parameter": "B_TIME",
+      "std_parameter": "B_TIME_S"
+    }
+  },
+  "utility_functions": {
+    "1": "ASC_TRAIN + B_TIME_RND * self.TRAIN_TT_SCALED + B_COST * self.TRAIN_COST_SCALED",
+    "2": "ASC_SM + B_TIME_RND * self.SM_TT_SCALED + B_COST * self.SM_COST_SCALED",
+    "3": "ASC_CAR + B_TIME_RND * self.CAR_TT_SCALED + B_COST * self.CAR_CO_SCALED"
+  },
+  "availability": {
+    "1": "self.TRAIN_AV_SP",
+    "2": "self.SM_AV",
+    "3": "self.CAR_AV_SP"
+  },
+  "choice_column": "CHOICE",
+  "custom_methods": {
+    "_calculate_utilities": "\"\"\"Calculate utilities for each alternative using Mixed Logit parameters.\"\"\"\n# For mixed logit, we use the mean of the random parameter\nv1 = (betas['ASC_TRAIN'] + \n      betas['B_TIME'] * self.database.data['TRAIN_TT_SCALED'] + \n      betas['B_COST'] * self.database.data['TRAIN_COST_SCALED'])\n\nv2 = (# Fixed ASC_SM value\n      betas['B_TIME'] * self.database.data['SM_TT_SCALED'] + \n      betas['B_COST'] * self.database.data['SM_COST_SCALED'])\n\nv3 = (betas['ASC_CAR'] + \n      betas['B_TIME'] * self.database.data['CAR_TT_SCALED'] + \n      betas['B_COST'] * self.database.data['CAR_CO_SCALED'])\n\nreturn np.column_stack([v1, v2, v3])",
+    "_get_utility_function": "\"\"\"Get utility function for a specific alternative.\"\"\"\nbetas = self.results.get_beta_values()\n# For prediction, use mean of random parameter\nif alternative == 1:  # Train\n    return (betas['ASC_TRAIN'] + \n           betas['B_TIME'] * self.TRAIN_TT_SCALED + \n           betas['B_COST'] * self.TRAIN_COST_SCALED)\nelif alternative == 2:  # Swissmetro\n    return (# Fixed ASC_SM value\n           betas['B_TIME'] * self.SM_TT_SCALED + \n           betas['B_COST'] * self.SM_COST_SCALED)\nelif alternative == 3:  # Car\n    return (betas['ASC_CAR'] + \n           betas['B_TIME'] * self.CAR_TT_SCALED + \n           betas['B_COST'] * self.CAR_CO_SCALED)\nelse:\n    raise ValueError(f\"Invalid alternative: {alternative}\")",
+    "get_metrics": "\"\"\"Get metrics including random parameter information and VOT.\"\"\"\nmetrics = super().get_metrics()\n\n# Add random parameter statistics\nif self.results is not None:\n    beta_values = self.results.get_beta_values()\n    if 'B_TIME' in beta_values and 'B_TIME_S' in beta_values:\n        metrics['time_mean'] = beta_values['B_TIME']\n        metrics['time_std'] = beta_values['B_TIME_S']\n\n# Add model statistics and VOT metrics\nmetrics.update({\n    'final_ll': self.final_ll if hasattr(self, 'final_ll') else None,\n    'rho_squared': self.rho_squared if hasattr(self, 'rho_squared') else None,\n    'rho_squared_bar': self.rho_squared_bar if hasattr(self, 'rho_squared_bar') else None,\n    'vot': self.vot if hasattr(self, 'vot') else None,\n    'market_share_accuracy': self.market_share_accuracy if hasattr(self, 'market_share_accuracy') else None,\n    'choice_accuracy': self.choice_accuracy if hasattr(self, 'choice_accuracy') else None,\n    'actual_shares': self.actual_shares if hasattr(self, 'actual_shares') else None,\n    'predicted_shares': self.predicted_shares if hasattr(self, 'predicted_shares') else None,\n    'confusion_matrix': self.confusion_matrix.to_dict() if hasattr(self, 'confusion_matrix') else None\n})\n\nreturn metrics"
+  },
+  "version": "1.0",
+  "created_by": "mcbs_team",
+  "created_date": "2023-01-15"
+}

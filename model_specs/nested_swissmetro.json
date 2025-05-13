@@ -1,0 +1,41 @@
+{
+  "name": "nested_swissmetro",
+  "description": "Nested logit model for Swissmetro data with train and car in one nest",
+  "model_type": "nl",
+  "compatible_datasets": ["swissmetro_dataset"],
+  "base_class": "BaseSwissmetroModel",
+  "parameters": [
+    {"name": "ASC_CAR", "default": 0, "fixed": false},
+    {"name": "ASC_TRAIN", "default": 0, "fixed": false},
+    {"name": "ASC_SM", "default": 0, "fixed": true, "value": 1},
+    {"name": "B_TIME", "default": 0, "fixed": false},
+    {"name": "B_COST", "default": 0, "fixed": false},
+    {"name": "MU", "default": 1, "lower_bound": 1, "upper_bound": 10, "fixed": false}
+  ],
+  "utility_functions": {
+    "1": "ASC_TRAIN + B_TIME * self.TRAIN_TT_SCALED + B_COST * self.TRAIN_COST_SCALED",
+    "2": "ASC_SM + B_TIME * self.SM_TT_SCALED + B_COST * self.SM_COST_SCALED",
+    "3": "ASC_CAR + B_TIME * self.CAR_TT_SCALED + B_COST * self.CAR_CO_SCALED"
+  },
+  "availability": {
+    "1": "self.TRAIN_AV_SP",
+    "2": "self.SM_AV",
+    "3": "self.CAR_AV_SP"
+  },
+  "nesting_structure": {
+    "existing": {
+      "mu_parameter": "MU",
+      "alternatives": ["1", "3"],
+      "name": "existing"
+    }
+  },
+  "choice_column": "CHOICE",
+  "custom_methods": {
+    "_calculate_utilities": "\"\"\"Calculate utilities for each alternative using NL parameters.\"\"\"\nv1 = (betas['ASC_TRAIN'] + \n      betas['B_TIME'] * self.database.data['TRAIN_TT_SCALED'] + \n      betas['B_COST'] * self.database.data['TRAIN_COST_SCALED'])\n\nv2 = (# Fixed ASC_SM value\n      betas['B_TIME'] * self.database.data['SM_TT_SCALED'] + \n      betas['B_COST'] * self.database.data['SM_COST_SCALED'])\n\nv3 = (betas['ASC_CAR'] + \n      betas['B_TIME'] * self.database.data['CAR_TT_SCALED'] + \n      betas['B_COST'] * self.database.data['CAR_CO_SCALED'])\n\nutilities = np.column_stack([v1, v2, v3])\n\n# Apply nesting structure\nmu = betas['MU']\nutilities[:, [0, 2]] = utilities[:, [0, 2]] / mu  # Scale utilities in the nest\n\nreturn utilities",
+    "_get_utility_function": "\"\"\"Get utility function for a specific alternative.\"\"\"\nbetas = self.results.get_beta_values()\nmu = betas['MU']\n\nif alternative == 1:  # Train (in nest)\n    return (betas['ASC_TRAIN'] + \n           betas['B_TIME'] * self.TRAIN_TT_SCALED + \n           betas['B_COST'] * self.TRAIN_COST_SCALED) / mu\nelif alternative == 2:  # Swissmetro (not in nest)\n    return (# Fixed ASC_SM value\n           betas['B_TIME'] * self.SM_TT_SCALED + \n           betas['B_COST'] * self.SM_COST_SCALED)\nelif alternative == 3:  # Car (in nest)\n    return (betas['ASC_CAR'] + \n           betas['B_TIME'] * self.CAR_TT_SCALED + \n           betas['B_COST'] * self.CAR_CO_SCALED) / mu\nelse:\n    raise ValueError(f\"Invalid alternative: {alternative}\")",
+    "calculate_choice_accuracy": "\"\"\"Calculate individual choice prediction accuracy and market shares for nested logit models.\"\"\"\nif not hasattr(self, 'results'):\n    raise RuntimeError(\"Model must be estimated before calculating accuracy\")\n    \n# Get utility functions for simulation\nV1 = self._get_utility_function(1)\nV2 = self._get_utility_function(2)\nV3 = self._get_utility_function(3)\n\n# Associate utility functions with alternatives\nV = {1: V1, 2: V2, 3: V3}\n\n# Associate availability conditions\nav = {1: self.TRAIN_AV_SP, 2: self.SM_AV, 3: self.CAR_AV_SP}\n\n# Calculate choice probabilities\nprob_train = models.nested(V, None, nests, 1)\nprob_SM = models.nested(V, None, nests, 2)\nprob_car = models.nested(V, None, nests, 3)\n\n# Setup simulation\nsimulate = {\n    'Prob. train': prob_train,\n    'Prob. SM': prob_SM,\n    'Prob. car': prob_car\n}\n\n# Run simulation\nbiogeme = bio.BIOGEME(self.database, simulate)\nbiogeme.modelName = \"choice_prediction_nest\"\nsimulatedValues = biogeme.simulate(self.results.get_beta_values())\n\n# Calculate market shares\nactual_counts = self.database.data['CHOICE'].value_counts()\ntotal = len(self.database.data)\nself.actual_shares = {i: actual_counts.get(i, 0) / total for i in [1, 2, 3]}\n\n# Calculate predicted shares (mean probability for each alternative)\nself.predicted_shares = {\n    1: simulatedValues['Prob. train'].mean(),\n    2: simulatedValues['Prob. SM'].mean(),\n    3: simulatedValues['Prob. car'].mean()\n}\n\n# Calculate market share accuracy\ntotal_abs_error = sum(abs(self.actual_shares[i] - self.predicted_shares[i]) \n                    for i in [1, 2, 3])\nself.market_share_accuracy = 1 - (total_abs_error / 2)  # Divide by 2 since errors are double counted\n\nprint(\"\\nMarket Shares:\")\nprint(\"Mode      Actual    Predicted\")\nprint(\"-\" * 30)\nfor i in [1, 2, 3]:  # 1: Train, 2: SM, 3: Car\n    print(f\"{i:4d}     {self.actual_shares[i]:.3f}     {self.predicted_shares[i]:.3f}\")\nprint(f\"\\nMarket Share Accuracy: {self.market_share_accuracy:.3f}\")\n\n# Calculate choice accuracy\nprob_max = simulatedValues.idxmax(axis=1)\nprob_max = prob_max.replace({'Prob. train': 1, 'Prob. SM': 2, 'Prob. car': 3})\n\n# Create confusion matrix\ndata_sim = {\n    'y_Actual': self.database.data['CHOICE'],\n    'y_Predicted': prob_max\n}\ndf = pd.DataFrame(data_sim, columns=['y_Actual', 'y_Predicted'])\nself.confusion_matrix = pd.crosstab(\n    df['y_Actual'], \n    df['y_Predicted'], \n    rownames=['Actual'], \n    colnames=['Predicted']\n)\n\n# Calculate accuracy\nself.choice_accuracy = (\n    np.diagonal(self.confusion_matrix.to_numpy()).sum() / \n    self.confusion_matrix.to_numpy().sum()\n)\n\nprint(\"\\nConfusion Matrix:\")\nprint(self.confusion_matrix)\nprint(f\"\\nChoice Prediction Accuracy: {self.choice_accuracy:.3f}\")"
+  },
+  "version": "1.0",
+  "created_by": "mcbs_team",
+  "created_date": "2023-01-15"
+}

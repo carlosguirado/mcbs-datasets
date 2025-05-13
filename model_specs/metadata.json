@@ -1,0 +1,35 @@
+{
+  "mnl_swissmetro": {
+    "name": "mnl_swissmetro",
+    "description": "Basic multinomial logit model for Swissmetro data with time and cost parameters",
+    "type": "mnl",
+    "datasets": ["swissmetro_dataset"],
+    "file": "mnl_swissmetro.json",
+    "parameters": 4,
+    "version": "1.0",
+    "created_date": "2023-01-15",
+    "created_by": "mcbs_team"
+  },
+  "nested_swissmetro": {
+    "name": "nested_swissmetro",
+    "description": "Nested logit model for Swissmetro data with train and car in one nest",
+    "type": "nl",
+    "datasets": ["swissmetro_dataset"],
+    "file": "nested_swissmetro.json",
+    "parameters": 5,
+    "version": "1.0",
+    "created_date": "2023-01-15",
+    "created_by": "mcbs_team"
+  },
+  "mixed_swissmetro": {
+    "name": "mixed_swissmetro",
+    "description": "Mixed logit model for Swissmetro data with random coefficient for travel time",
+    "type": "mixed",
+    "datasets": ["swissmetro_dataset"],
+    "file": "mixed_swissmetro.json",
+    "parameters": 5,
+    "version": "1.0",
+    "created_date": "2023-01-15",
+    "created_by": "mcbs_team"
+  }
+}

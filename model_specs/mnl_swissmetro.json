@@ -1,0 +1,32 @@
+{
+  "name": "mnl_swissmetro",
+  "description": "Basic multinomial logit model for Swissmetro data with time and cost parameters",
+  "model_type": "mnl",
+  "compatible_datasets": ["swissmetro_dataset"],
+  "base_class": "BaseSwissmetroModel",
+  "parameters": [
+    {"name": "ASC_CAR", "default": 0, "fixed": false},
+    {"name": "ASC_TRAIN", "default": 0, "fixed": false},
+    {"name": "ASC_SM", "default": 0, "fixed": true, "value": 1},
+    {"name": "B_TIME", "default": 0, "fixed": false},
+    {"name": "B_COST", "default": 0, "fixed": false}
+  ],
+  "utility_functions": {
+    "1": "ASC_TRAIN + B_TIME * self.TRAIN_TT_SCALED + B_COST * self.TRAIN_COST_SCALED",
+    "2": "ASC_SM + B_TIME * self.SM_TT_SCALED + B_COST * self.SM_COST_SCALED",
+    "3": "ASC_CAR + B_TIME * self.CAR_TT_SCALED + B_COST * self.CAR_CO_SCALED"
+  },
+  "availability": {
+    "1": "self.TRAIN_AV_SP",
+    "2": "self.SM_AV",
+    "3": "self.CAR_AV_SP"
+  },
+  "choice_column": "CHOICE",
+  "custom_methods": {
+    "_calculate_utilities": "\"\"\"Calculate utilities for each alternative using MNL parameters.\"\"\"\n# ASC_SM is fixed to 1 for identification\nv1 = (betas['ASC_TRAIN'] + \n      betas['B_TIME'] * self.database.data['TRAIN_TT_SCALED'] + \n      betas['B_COST'] * self.database.data['TRAIN_COST_SCALED'])\n\nv2 = (# Fixed ASC_SM value\n      betas['B_TIME'] * self.database.data['SM_TT_SCALED'] + \n      betas['B_COST'] * self.database.data['SM_COST_SCALED'])\n\nv3 = (betas['ASC_CAR'] + \n      betas['B_TIME'] * self.database.data['CAR_TT_SCALED'] + \n      betas['B_COST'] * self.database.data['CAR_CO_SCALED'])\n\nreturn np.column_stack([v1, v2, v3])",
+    "_get_utility_function": "\"\"\"Get utility function for a specific alternative.\"\"\"\nbetas = self.results.get_beta_values()\nif alternative == 1:  # Train\n    return (betas['ASC_TRAIN'] + \n           betas['B_TIME'] * self.TRAIN_TT_SCALED + \n           betas['B_COST'] * self.TRAIN_COST_SCALED)\nelif alternative == 2:  # Swissmetro\n    return (# Fixed ASC_SM value\n           betas['B_TIME'] * self.SM_TT_SCALED + \n           betas['B_COST'] * self.SM_COST_SCALED)\nelif alternative == 3:  # Car\n    return (betas['ASC_CAR'] + \n           betas['B_TIME'] * self.CAR_TT_SCALED + \n           betas['B_COST'] * self.CAR_CO_SCALED)\nelse:\n    raise ValueError(f\"Invalid alternative: {alternative}\")"
+  },
+  "version": "1.0",
+  "created_by": "mcbs_team",
+  "created_date": "2023-01-15"
+}
